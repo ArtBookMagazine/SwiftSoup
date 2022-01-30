@@ -494,6 +494,72 @@ open class Element: Node {
     }
 
     /**
+     * CSS escapes the supplied string so it can be used in an identifier selector.
+     * <p>
+     * https://www.w3.org/International/questions/qa-escapes#css_identifiers
+     * </p>
+     *
+     * @return the escaped string that can be used in a selector.
+     */
+    private func cssEspace(_ string: String) -> String {
+        guard !string.isEmpty else { return "" }
+        let firstChar = string.first
+        return string.enumerated()
+            .map { (index, chr) -> String in
+                // If the character is NULL (U+0000), then the REPLACEMENT CHARACTER
+                // (U+FFFD).
+                if chr == "\u{0000}" {
+                    return "\\uFFFD"
+                }
+                
+                if
+                    // If the character is in the range [\1-\1F] (U+0001 to U+001F) or is
+                    // U+007F, […]
+                    ("\u{0001}"..."\u{001f}").contains(chr) ||
+                    chr == "\u{007f}" ||
+                    // If the character is the first character and is in the range [0-9]
+                    // (U+0030 to U+0039), […]
+                    (("\u{0030}"..."\u{0039}").contains(chr) &&
+                        // If the character is the second character and is in the range [0-9]
+                        // (U+0030 to U+0039) and the first character is a `-` (U+002D), […]
+                        (index == 0 ||
+                        (index == 1 && firstChar == "\u{002D}")))
+                {
+                    return "\\{chr.hexDigitValue} "
+                }
+                
+                if
+                    // If the character is the first character and is a `-` (U+002D), and
+                    // there is no second character, […]
+                    index == 0 &&
+                    string.count == 1 &&
+                    chr == "\u{002D}"
+                {
+                    return "\\\(chr)"
+                }
+                
+                // If the character is not handled by one of the above rules and is
+                // greater than or equal to U+0080, is `-` (U+002D) or `_` (U+005F), or
+                // is in one of the ranges [0-9] (U+0030 to U+0039), [A-Z] (U+0041 to
+                // U+005A), or [a-z] (U+0061 to U+007A), […]
+                if
+                    chr >= "\u{0080}" ||
+                    chr == "\u{002D}" ||
+                    chr == "\u{005F}" ||
+                    (chr >= "\u{0030}" && chr <= "\u{0039}") ||
+                    (chr >= "\u{0041}" && chr <= "\u{005A}") ||
+                    (chr >= "\u{0061}" && chr <= "\u{007A}")
+                {
+                    // the character itself
+                    return String(chr)
+                }
+                
+                return "\\\(chr)"
+            }
+            .joined()
+    }
+
+     /**
      * Get a CSS selector that will uniquely select this element.
      * <p>
      * If the element has an ID, returns #id;
@@ -506,7 +572,7 @@ open class Element: Node {
     public func cssSelector()throws->String {
         let elementId = id()
         if (elementId.count > 0) {
-            return "#" + elementId
+            return "#" + cssEspace(elementId)
         }
 
         // Translate HTML namespace ns:tag to CSS namespace syntax ns|tag
